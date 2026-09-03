@@ -1,0 +1,82 @@
+# Portaria do PR: título, branch e tamanho.
+#
+# Roda antes de qualquer build porque falha de convenção custa segundos e falha
+# de build custa minutos — e um título fora do padrão quebra o versionamento
+# automático lá na frente, quando o release já está sendo cortado.
+name: pr-lint
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: >
+          Runner em JSON. O padrao e o self-hosted do homelab: minuto de
+          self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
+        type: string
+        default: '["self-hosted","homelab"]'
+      max_changed_files:
+        description: Acima disto o PR recebe um aviso (não bloqueia)
+        type: number
+        default: 50
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  titulo:
+    name: título segue Conventional Commits
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          types: |
+            feat
+            fix
+            chore
+            docs
+            test
+            refactor
+            ci
+            style
+            perf
+            build
+            revert
+          requireScope: false
+          # O merge de PR vira o commit em main, e é dele que a versão sai.
+          subjectPattern: ^(?![A-Z])(?!.*\.$).+$
+          subjectPatternError: |
+            A descrição "{subject}" precisa começar em minúscula e não terminar
+            com ponto. O título do PR vira o commit em main, e é dele que a
+            versão é calculada.
+
+  branch:
+    name: nome do branch segue a convenção
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - name: valida o prefixo
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|docs|hotfix|refactor|test|ci)/[a-z0-9._-]+$ ]]; then
+            echo "::error::branch '$BRANCH' fora do padrão <tipo>/<escopo-em-kebab-case>"
+            echo "Tipos aceitos: feat, fix, chore, docs, hotfix, refactor, test, ci"
+            exit 1
+          fi
+          echo "branch '$BRANCH' ok"
+
+  tamanho:
+    name: tamanho do PR
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: conta arquivos alterados
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l | tr -d ' ')
+          echo "arquivos alterados: $CHANGED"
+          if [[ "$CHANGED" -gt ${{ inputs.max_changed_files }} ]]; then
+            echo "::warning::PR com $CHANGED arquivos alterados. PR grande demora a ser revisado e esconde o que importa — considere fatiar."
+          fi

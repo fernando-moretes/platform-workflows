@@ -1,0 +1,109 @@
+# CI para projetos Node/TypeScript.
+#
+# Cada etapa roda mesmo se a anterior falhar (`if: always()`), porque saber que
+# há três problemas de uma vez vale mais do que descobrir um por execução.
+name: ci-node
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: >
+          Runner em JSON. O padrao e o self-hosted do homelab: minuto de
+          self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
+        type: string
+        default: '["self-hosted","homelab"]'
+      node_version:
+        type: string
+        default: "22"
+      package_manager:
+        description: npm, pnpm, yarn ou auto
+        type: string
+        default: auto
+      run_build:
+        type: boolean
+        default: true
+      working_directory:
+        type: string
+        default: "."
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: detecta o gerenciador de pacotes
+        id: pm
+        run: |
+          PM="${{ inputs.package_manager }}"
+          if [[ "$PM" == "auto" ]]; then
+            if   [[ -f pnpm-lock.yaml ]]; then PM=pnpm
+            elif [[ -f yarn.lock ]];      then PM=yarn
+            else                               PM=npm; fi
+          fi
+          echo "pm=$PM" >> "$GITHUB_OUTPUT"
+          echo "gerenciador: $PM"
+
+      - uses: pnpm/action-setup@v4
+        if: steps.pm.outputs.pm == 'pnpm'
+        with: { version: 9 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: ${{ steps.pm.outputs.pm }}
+          cache-dependency-path: ${{ inputs.working_directory }}/*lock*
+
+      - name: instala
+        run: |
+          case "${{ steps.pm.outputs.pm }}" in
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) yarn install --frozen-lockfile ;;
+            # `npm ci` exige lockfile; sem ele o install comum é o caminho.
+            npm)  [[ -f package-lock.json ]] && npm ci || npm install ;;
+          esac
+
+      - name: lint
+        if: always()
+        run: |
+          if npm run | grep -qE '^  lint'; then
+            ${{ steps.pm.outputs.pm }} run lint
+          else
+            echo "::notice::sem script 'lint' no package.json — etapa pulada"
+          fi
+
+      - name: typecheck
+        if: always()
+        run: |
+          if npm run | grep -qE '^  typecheck'; then
+            ${{ steps.pm.outputs.pm }} run typecheck
+          elif [[ -f tsconfig.json ]]; then
+            npx --yes tsc --noEmit
+          else
+            echo "::notice::projeto sem TypeScript — etapa pulada"
+          fi
+
+      - name: testes
+        if: always()
+        run: |
+          if npm run | grep -qE '^  test'; then
+            ${{ steps.pm.outputs.pm }} run test
+          else
+            echo "::notice::sem script 'test' — etapa pulada"
+          fi
+
+      - name: build
+        if: always() && inputs.run_build
+        run: |
+          if npm run | grep -qE '^  build'; then
+            ${{ steps.pm.outputs.pm }} run build
+          else
+            echo "::notice::sem script 'build' — etapa pulada"
+          fi

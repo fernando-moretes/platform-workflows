@@ -1,0 +1,66 @@
+# CI para repositório sem stack reconhecida: conteúdo, HCL, docs, shell.
+#
+# Existe para que nenhum repositório fique sem sinal nenhum. Verifica o que dá
+# para verificar sem saber a linguagem — e isso já pega link quebrado, YAML
+# inválido e script com erro de sintaxe.
+name: ci-generic
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: >
+          Runner em JSON. O padrao e o self-hosted do homelab: minuto de
+          self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
+        type: string
+        default: '["self-hosted","homelab"]'
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: YAML e JSON válidos
+        run: |
+          erros=0
+          while IFS= read -r f; do
+            python3 -c "import yaml,sys; yaml.safe_load(open('$f'))" 2>/dev/null || { echo "::error file=$f::YAML inválido"; erros=1; }
+          done < <(find . -path ./.git -prune -o \( -name '*.yml' -o -name '*.yaml' \) -print)
+          while IFS= read -r f; do
+            python3 -c "import json,sys; json.load(open('$f'))" 2>/dev/null || { echo "::error file=$f::JSON inválido"; erros=1; }
+          done < <(find . -path ./.git -prune -o -name '*.json' -print)
+          exit $erros
+
+      - name: sintaxe dos scripts shell
+        if: always()
+        run: |
+          erros=0
+          while IFS= read -r f; do
+            bash -n "$f" || { echo "::error file=$f::erro de sintaxe"; erros=1; }
+          done < <(find . -path ./.git -prune -o -name '*.sh' -print)
+          exit $erros
+
+      - name: Terraform/OpenTofu formatado
+        if: always()
+        run: |
+          if compgen -G "**/*.tf" > /dev/null || compgen -G "*.tf" > /dev/null; then
+            curl -fsSL https://get.opentofu.org/install-opentofu.sh | bash -s -- --install-method standalone >/dev/null 2>&1
+            tofu fmt -check -recursive . || echo "::warning::arquivos .tf fora do formato — rode 'tofu fmt -recursive .'"
+          else
+            echo "::notice::sem arquivos Terraform"
+          fi
+
+      - name: links do README
+        if: always()
+        run: |
+          [[ -f README.md ]] || { echo "::warning::repositório sem README.md"; exit 0; }
+          quebrados=0
+          grep -oE 'https?://[^)"< ]+' README.md | sort -u | while read -r url; do
+            code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' -L "$url" || echo 000)
+            [[ "$code" =~ ^(2|3) ]] || echo "::warning::link possivelmente quebrado ($code): $url"
+          done
+          exit 0

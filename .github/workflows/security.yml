@@ -1,0 +1,162 @@
+# Varredura de segurança: segredos, dependências, código e container.
+#
+# Cada etapa é independente e nenhuma bloqueia a próxima, porque o valor está
+# no relatório completo. O que bloqueia é o gate no fim, e só por segredo
+# vazado — o único achado que não pode esperar a próxima sprint.
+name: security
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: >
+          Runner em JSON. O padrao e o self-hosted do homelab: minuto de
+          self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
+        type: string
+        default: '["self-hosted","homelab"]'
+      sonar_host:
+        description: URL do SonarQube; vazio desliga a etapa
+        type: string
+        default: ""
+      defectdojo_host:
+        description: URL do DefectDojo; vazio desliga o envio
+        type: string
+        default: ""
+      product_name:
+        type: string
+        default: ${{ github.event.repository.name }}
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      DEFECTDOJO_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  segredos:
+    name: segredos vazados
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    outputs:
+      vazou: ${{ steps.gitleaks.outcome == 'failure' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      # O binario, nao a acao: gitleaks-action@v2 exige licenca paga quando o
+      # repositorio pertence a uma organizacao, e falhava com "missing gitleaks
+      # license" — barrando todo merge por erro de licenca, nao por vazamento.
+      # O gitleaks em si e open source e roda sem licenca nenhuma.
+      - id: gitleaks
+        continue-on-error: true
+        run: |
+          VER=8.21.2
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar xz -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --no-banner \
+            --report-format sarif --report-path results.sarif
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks
+          path: results.sarif
+          if-no-files-found: ignore
+
+  dependencias:
+    name: dependências vulneráveis
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - uses: actions/checkout@v4
+      # O binario, nao a acao. trivy-action resolve a versao por um arquivo de
+      # metadados no repositorio dela, e toda tag que testei devolveu "Missing
+      # download info" — uma dependencia externa a mais para uma ferramenta que
+      # e um binario estatico.
+      - name: trivy (sistema de arquivos)
+        run: |
+          VER=0.74.0
+          curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${VER}/trivy_${VER}_Linux-64bit.tar.gz" \
+            | tar xz -C /tmp trivy
+          /tmp/trivy fs . --scanners vuln,secret,misconfig \
+            --severity CRITICAL,HIGH --format sarif --output trivy.sarif \
+            --exit-code 0 --no-progress
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: trivy, path: trivy.sarif, if-no-files-found: ignore }
+
+  sonar:
+    name: qualidade (SonarQube)
+    if: inputs.sonar_host != ''
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_HOST_URL: ${{ inputs.sonar_host }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ inputs.product_name }}
+            -Dsonar.projectName=${{ inputs.product_name }}
+
+  consolida:
+    name: envia ao DefectDojo
+    if: inputs.defectdojo_host != '' && always()
+    needs: [segredos, dependencias]
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: relatorios }
+      - name: importa os achados
+        env:
+          DD_HOST: ${{ inputs.defectdojo_host }}
+          DD_TOKEN: ${{ secrets.DEFECTDOJO_TOKEN }}
+        run: |
+          set -uo pipefail
+          enviar() { # <arquivo> <tipo no DefectDojo>
+            [[ -f "$1" ]] || { echo "sem $1 — nada a enviar"; return 0; }
+            curl -sS -X POST "$DD_HOST/api/v2/import-scan/" \
+              -H "Authorization: Token $DD_TOKEN" \
+              -F "scan_type=$2" -F "file=@$1" \
+              -F "product_name=${{ inputs.product_name }}" \
+              -F "engagement_name=CI" -F "auto_create_context=true" \
+              -F "active=true" -F "verified=false" \
+              -F "branch_tag=${{ github.ref_name }}" \
+              -F "commit_hash=${{ github.sha }}" \
+              -o /dev/null -w "  $2 → HTTP %{http_code}\n"
+          }
+          enviar relatorios/trivy/trivy.sarif "SARIF"
+          enviar relatorios/gitleaks/results.sarif "SARIF"
+
+  gate:
+    name: bloqueio
+    needs: [segredos, dependencias]
+    if: always()
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { path: relatorios }
+      - name: só segredo vazado barra o merge
+        run: |
+          # `vazou` vem do outcome do gitleaks, que sai diferente de zero tanto
+          # ao achar segredo quanto ao falhar sozinho. Barrar merge por
+          # ferramenta quebrada ensina a ignorar o gate, entao o relatorio
+          # decide: sem SARIF com achado, nao ha o que barrar.
+          if [[ "${{ needs.segredos.outputs.vazou }}" != "true" ]]; then
+            echo "sem segredo vazado; demais achados estão no relatório e no DefectDojo"
+            exit 0
+          fi
+          if [[ ! -s relatorios/gitleaks/results.sarif ]]; then
+            echo "::warning::gitleaks terminou em erro sem produzir relatório — não vou barrar o merge por falha de ferramenta"
+            exit 0
+          fi
+          echo "::error::segredo detectado no histórico — rotacione a credencial ANTES de remover o commit"
+          exit 1

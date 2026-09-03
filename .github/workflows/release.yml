@@ -1,0 +1,112 @@
+# Corta a versão a partir dos commits desde a última tag.
+#
+# Ninguém escreve número de versão à mão: o tipo do commit decide o incremento,
+# então a régua é a mesma sempre e o changelog sai de graça.
+name: release
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: >
+          Runner em JSON. O padrao e o self-hosted do homelab: minuto de
+          self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
+        type: string
+        default: '["self-hosted","homelab"]'
+      tag_prefix:
+        type: string
+        default: v
+      draft:
+        type: boolean
+        default: false
+    outputs:
+      version:
+        description: A versão cortada, ou vazio se não havia o que lançar
+        value: ${{ jobs.release.outputs.version }}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    outputs:
+      version: ${{ steps.versao.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: calcula a próxima versão
+        id: versao
+        run: |
+          set -euo pipefail
+          PREFIX="${{ inputs.tag_prefix }}"
+          ULTIMA=$(git tag --list "${PREFIX}*" --sort=-v:refname | head -1)
+
+          if [[ -z "$ULTIMA" ]]; then
+            RANGE=""
+            MAJOR=0; MINOR=0; PATCH=0
+            echo "sem tag anterior — primeira versão"
+          else
+            RANGE="${ULTIMA}..HEAD"
+            SEMVER="${ULTIMA#$PREFIX}"
+            IFS=. read -r MAJOR MINOR PATCH <<< "$SEMVER"
+            echo "última tag: $ULTIMA"
+          fi
+
+          COMMITS=$(git log --format='%s%n%b' $RANGE)
+          if [[ -z "$COMMITS" ]]; then
+            echo "nada novo desde $ULTIMA"
+            echo "version=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          # A ordem importa: breaking vence feat, que vence fix.
+          if grep -qE '^[a-z]+(\(.+\))?!:|^BREAKING CHANGE:' <<< "$COMMITS"; then
+            MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0; TIPO=major
+          elif grep -qE '^feat(\(.+\))?:' <<< "$COMMITS"; then
+            MINOR=$((MINOR+1)); PATCH=0; TIPO=minor
+          elif grep -qE '^fix(\(.+\))?:' <<< "$COMMITS"; then
+            PATCH=$((PATCH+1)); TIPO=patch
+          else
+            echo "só commits que não movem versão (chore/docs/ci/test) — nada a lançar"
+            echo "version=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          NOVA="${PREFIX}${MAJOR}.${MINOR}.${PATCH}"
+          echo "incremento $TIPO → $NOVA"
+          echo "version=$NOVA" >> "$GITHUB_OUTPUT"
+          echo "range=$RANGE" >> "$GITHUB_OUTPUT"
+
+      - name: monta o changelog
+        if: steps.versao.outputs.version != ''
+        id: changelog
+        run: |
+          RANGE="${{ steps.versao.outputs.range }}"
+          {
+            echo "## O que mudou"
+            echo
+            for par in "feat:Funcionalidades" "fix:Correções" "perf:Desempenho" \
+                       "refactor:Refatorações" "docs:Documentação" "ci:CI e build"; do
+              tipo="${par%%:*}"; titulo="${par#*:}"
+              linhas=$(git log --format='- %s (%h)' $RANGE --grep="^${tipo}(\?.*\?)\?!\?:" -E || true)
+              [[ -n "$linhas" ]] && { echo "### $titulo"; echo; echo "$linhas"; echo; }
+            done
+            quebras=$(git log --format='%B' $RANGE | grep -A5 '^BREAKING CHANGE:' || true)
+            [[ -n "$quebras" ]] && { echo "### ⚠️ Mudanças incompatíveis"; echo; echo '```'; echo "$quebras"; echo '```'; }
+          } > NOTAS.md
+          cat NOTAS.md
+
+      - name: cria a tag e o release
+        if: steps.versao.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSAO="${{ steps.versao.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSAO" -m "$VERSAO"
+          git push origin "$VERSAO"
+          gh release create "$VERSAO" --title "$VERSAO" --notes-file NOTAS.md \
+            ${{ inputs.draft && '--draft' || '' }}
+          echo "release $VERSAO publicado"

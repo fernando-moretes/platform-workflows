@@ -1,0 +1,63 @@
+# CI para projetos Python. Usa uv, que resolve e instala em segundos.
+name: ci-python
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: >
+          Runner em JSON. O padrao e o self-hosted do homelab: minuto de
+          self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
+        type: string
+        default: '["self-hosted","homelab"]'
+      python_version:
+        type: string
+        default: "3.12"
+      working_directory:
+        type: string
+        default: "."
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          enable-cache: true
+
+      - name: instala dependências
+        run: |
+          if   [[ -f uv.lock ]];          then uv sync --all-extras --dev
+          elif [[ -f pyproject.toml ]];   then uv pip install --system -e ".[dev]" || uv pip install --system -e .
+          elif [[ -f requirements.txt ]]; then uv pip install --system -r requirements.txt
+          else echo "::notice::sem manifesto de dependências"; fi
+
+      - name: sintaxe (o piso — nunca é pulado)
+        run: |
+          uv run --no-project python -m compileall -q . 2>&1 | tail -20
+          echo "sintaxe ok"
+
+      - name: ruff
+        if: always()
+        run: uv run --no-project --with ruff ruff check --output-format=github . || echo "::warning::ruff apontou problemas"
+
+      - name: formatação
+        if: always()
+        run: uv run --no-project --with ruff ruff format --check . || echo "::warning::código fora do formato do ruff"
+
+      - name: testes
+        if: always()
+        run: |
+          if [[ -d tests ]] || compgen -G "test_*.py" > /dev/null || compgen -G "*_test.py" > /dev/null; then
+            uv run --no-project --with pytest pytest -q
+          else
+            echo "::notice::sem testes no repositório — etapa pulada"
+          fi

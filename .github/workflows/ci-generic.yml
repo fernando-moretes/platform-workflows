@@ -38,7 +38,16 @@ jobs:
           if python3 -c "import yaml" 2>/dev/null; then
             while IFS= read -r f; do
               # O nome vai por argv: caminho com aspas quebraria a interpolacao.
-              if ! saida=$(python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$f" 2>&1); then
+              # safe_load recusa tags proprias de ferramenta (!!python/name: do
+              # mkdocs, !Ref/!GetAtt do CloudFormation). O arquivo e valido; so
+              # nao e "seguro" no sentido do safe_load. Ignorar tag desconhecida
+              # preserva a checagem de sintaxe sem inventar falso positivo.
+              if ! saida=$(python3 -c "
+import yaml, sys
+class L(yaml.SafeLoader): pass
+L.add_multi_constructor('', lambda l, s, n: None)
+yaml.load(open(sys.argv[1]), Loader=L)
+" "$f" 2>&1); then
                 echo "::error file=$f::YAML invalido: $(echo "$saida" | tail -1)"
                 erros=1
               fi
@@ -61,7 +70,16 @@ jobs:
         run: |
           erros=0
           while IFS= read -r f; do
-            bash -n "$f" || { echo "::error file=$f::erro de sintaxe"; erros=1; }
+            bash -n "$f" 2>/dev/null && continue
+            # Nem todo .sh e bash: oh-my-zsh e afins usam sintaxe de zsh, que o
+            # bash recusa com razao. Antes de acusar erro, confirmar com o zsh;
+            # so e erro de verdade se nenhum dos dois conseguir ler o arquivo.
+            if command -v zsh >/dev/null && zsh -n "$f" 2>/dev/null; then
+              echo "::notice file=$f::sintaxe de zsh, nao de bash"
+              continue
+            fi
+            echo "::error file=$f::erro de sintaxe: $(bash -n "$f" 2>&1 | head -1)"
+            erros=1
           done < <(find . -path ./.git -prune -o -name '*.sh' -print)
           exit $erros
 

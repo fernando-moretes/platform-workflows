@@ -39,7 +39,12 @@ jobs:
           # managed environment") nos runners Debian/Ubuntu. Um venv proprio
           # evita isso; os passos seguintes usam `uv run --no-project --with`,
           # entao nao dependem de onde estas dependencias foram parar.
-          uv venv --quiet
+          # O setup-uv ja cria e ativa um .venv quando recebe python-version;
+          # criar outro por cima falha com "a virtual environment already
+          # exists". Instalar no interpretador do sistema tambem nao serve:
+          # esbarra no PEP 668 nos runners Debian. Entao reaproveita o que existe
+          # e so cria um quando nao ha nenhum ativo.
+          [[ -n "${VIRTUAL_ENV:-}" ]] || uv venv --quiet
           if   [[ -f uv.lock ]];          then uv sync --all-extras --dev
           elif [[ -f pyproject.toml ]];   then uv pip install -e ".[dev]" || uv pip install -e .
           elif [[ -f requirements.txt ]]; then uv pip install -r requirements.txt

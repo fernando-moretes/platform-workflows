@@ -49,6 +49,16 @@ jobs:
             else                               PM=npm; fi
           fi
           echo "pm=$PM" >> "$GITHUB_OUTPUT"
+          # O cache do setup-node aponta para o lockfile; sem lockfile a acao
+          # falha com "Some specified paths were not resolved" e derruba o job
+          # inteiro por uma otimizacao que nem era possivel. So liga o cache
+          # quando existe de fato o que cachear.
+          if compgen -G "*lock*" > /dev/null; then
+            echo "lock=sim" >> "$GITHUB_OUTPUT"
+          else
+            echo "lock=" >> "$GITHUB_OUTPUT"
+            echo "::notice::sem lockfile — cache de dependencias desligado"
+          fi
           echo "gerenciador: $PM"
 
       - uses: pnpm/action-setup@v4
@@ -58,8 +68,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
-          cache: ${{ steps.pm.outputs.pm }}
-          cache-dependency-path: ${{ inputs.working_directory }}/*lock*
+          cache: ${{ steps.pm.outputs.lock == 'sim' && steps.pm.outputs.pm || '' }}
+          cache-dependency-path: ${{ steps.pm.outputs.lock == 'sim' && format('{0}/*lock*', inputs.working_directory) || '' }}
 
       - name: instala
         run: |

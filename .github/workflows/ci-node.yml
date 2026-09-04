@@ -42,6 +42,16 @@ jobs:
       - name: detecta o gerenciador de pacotes
         id: pm
         run: |
+          # Nem todo repositorio roteado para esta pipeline e um projeto Node:
+          # repositorio de documentacao ou de referencia nao tem package.json, e
+          # `npm install` ali morre com ENOENT antes de qualquer verificacao. Sem
+          # manifesto, os passos de Node nao tem o que fazer e sao pulados.
+          if [[ -f package.json ]]; then
+            echo "pkg=sim" >> "$GITHUB_OUTPUT"
+          else
+            echo "pkg=" >> "$GITHUB_OUTPUT"
+            echo "::notice::sem package.json — etapas de Node puladas"
+          fi
           PM="${{ inputs.package_manager }}"
           if [[ "$PM" == "auto" ]]; then
             if   [[ -f pnpm-lock.yaml ]]; then PM=pnpm
@@ -62,7 +72,7 @@ jobs:
           echo "gerenciador: $PM"
 
       - uses: pnpm/action-setup@v4
-        if: steps.pm.outputs.pm == 'pnpm'
+        if: steps.pm.outputs.pkg == 'sim' && steps.pm.outputs.pm == 'pnpm'
         with: { version: 9 }
 
       - uses: actions/setup-node@v4
@@ -72,6 +82,7 @@ jobs:
           cache-dependency-path: ${{ steps.pm.outputs.lock == 'sim' && format('{0}/*lock*', inputs.working_directory) || '' }}
 
       - name: instala
+        if: steps.pm.outputs.pkg == 'sim'
         run: |
           case "${{ steps.pm.outputs.pm }}" in
             pnpm) pnpm install --frozen-lockfile ;;
@@ -81,7 +92,7 @@ jobs:
           esac
 
       - name: lint
-        if: always()
+        if: always() && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  lint'; then
             ${{ steps.pm.outputs.pm }} run lint
@@ -90,7 +101,7 @@ jobs:
           fi
 
       - name: typecheck
-        if: always()
+        if: always() && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  typecheck'; then
             ${{ steps.pm.outputs.pm }} run typecheck
@@ -101,7 +112,7 @@ jobs:
           fi
 
       - name: testes
-        if: always()
+        if: always() && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  test'; then
             ${{ steps.pm.outputs.pm }} run test
@@ -110,7 +121,7 @@ jobs:
           fi
 
       - name: build
-        if: always() && inputs.run_build
+        if: always() && inputs.run_build && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  build'; then
             ${{ steps.pm.outputs.pm }} run build

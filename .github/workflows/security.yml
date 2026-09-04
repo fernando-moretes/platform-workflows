@@ -117,9 +117,15 @@ jobs:
           SONAR_HOST_URL: ${{ inputs.sonar_host }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
+          # Havendo .java, o sensor Java aborta a analise inteira se nao
+          # receber sonar.java.binaries — e a pipeline nao compila nada, entao
+          # nao ha classes para apontar. Indicar a raiz satisfaz a exigencia e
+          # deixa o restante (Python, JS, Terraform, YAML) ser analisado; sem
+          # isso um unico arquivo Java derruba a varredura do repositorio todo.
           args: >
             -Dsonar.projectKey=${{ inputs.product_name }}
             -Dsonar.projectName=${{ inputs.product_name }}
+            -Dsonar.java.binaries=.
 
   consolida:
     name: envia ao DefectDojo

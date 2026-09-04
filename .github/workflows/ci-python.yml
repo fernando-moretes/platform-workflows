@@ -35,9 +35,14 @@ jobs:
 
       - name: instala dependências
         run: |
+          # Instalar no interpretador do sistema esbarra no PEP 668 ("externally
+          # managed environment") nos runners Debian/Ubuntu. Um venv proprio
+          # evita isso; os passos seguintes usam `uv run --no-project --with`,
+          # entao nao dependem de onde estas dependencias foram parar.
+          uv venv --quiet
           if   [[ -f uv.lock ]];          then uv sync --all-extras --dev
-          elif [[ -f pyproject.toml ]];   then uv pip install --system -e ".[dev]" || uv pip install --system -e .
-          elif [[ -f requirements.txt ]]; then uv pip install --system -r requirements.txt
+          elif [[ -f pyproject.toml ]];   then uv pip install -e ".[dev]" || uv pip install -e .
+          elif [[ -f requirements.txt ]]; then uv pip install -r requirements.txt
           else echo "::notice::sem manifesto de dependências"; fi
 
       - name: sintaxe (o piso — nunca é pulado)

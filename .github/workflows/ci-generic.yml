@@ -37,6 +37,10 @@ jobs:
 
           if python3 -c "import yaml" 2>/dev/null; then
             while IFS= read -r f; do
+              # Arquivo vazio nao tem sintaxe para estar errada. Placeholder vazio
+              # e comum — o acme.json do Traefik nasce assim e so e preenchido em
+              # runtime — e reprovar isso e falso positivo.
+              [[ -s "$f" ]] || continue
               # O nome vai por argv: caminho com aspas quebraria a interpolacao.
               # safe_load recusa tags proprias de ferramenta (!!python/name: do
               # mkdocs, !Ref/!GetAtt do CloudFormation). O arquivo e valido; so
@@ -52,6 +56,10 @@ jobs:
           fi
 
           while IFS= read -r f; do
+            # Arquivo vazio nao tem sintaxe para estar errada. Placeholder vazio
+            # e comum — o acme.json do Traefik nasce assim e so e preenchido em
+            # runtime — e reprovar isso e falso positivo.
+            [[ -s "$f" ]] || continue
             if ! saida=$(python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>&1); then
               echo "::error file=$f::JSON invalido: $(echo "$saida" | tail -1)"
               erros=1
@@ -65,6 +73,10 @@ jobs:
         run: |
           erros=0
           while IFS= read -r f; do
+            # Arquivo vazio nao tem sintaxe para estar errada. Placeholder vazio
+            # e comum — o acme.json do Traefik nasce assim e so e preenchido em
+            # runtime — e reprovar isso e falso positivo.
+            [[ -s "$f" ]] || continue
             bash -n "$f" 2>/dev/null && continue
             # Nem todo .sh e bash: oh-my-zsh e afins usam sintaxe de zsh, que o
             # bash recusa com razao. Antes de acusar erro, confirmar com o zsh;
@@ -82,8 +94,15 @@ jobs:
         if: always()
         run: |
           if compgen -G "**/*.tf" > /dev/null || compgen -G "*.tf" > /dev/null; then
-            curl -fsSL https://get.opentofu.org/install-opentofu.sh | bash -s -- --install-method standalone >/dev/null 2>&1
-            tofu fmt -check -recursive . || echo "::warning::arquivos .tf fora do formato — rode 'tofu fmt -recursive .'"
+            # Sob `set -e` a instalacao falhando derruba o passo inteiro e o
+            # resultado aparece como problema do repositorio. Formatacao de
+            # Terraform e aviso, nunca motivo de reprovacao — muito menos
+            # quando a ferramenta nem chegou a rodar.
+            if curl -fsSL https://get.opentofu.org/install-opentofu.sh | bash -s -- --install-method standalone >/dev/null 2>&1 && command -v tofu >/dev/null; then
+              tofu fmt -check -recursive . || echo "::warning::arquivos .tf fora do formato — rode 'tofu fmt -recursive .'"
+            else
+              echo "::warning::nao consegui instalar o OpenTofu — formatacao nao verificada"
+            fi
           else
             echo "::notice::sem arquivos Terraform"
           fi

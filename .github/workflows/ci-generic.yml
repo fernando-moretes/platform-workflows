@@ -27,12 +27,33 @@ jobs:
       - name: YAML e JSON válidos
         run: |
           erros=0
+
+          # O parser precisa existir antes de julgar o conteudo. Sem esta guarda
+          # um runner sem pyyaml reprova TODO arquivo YAML do repositorio, e o
+          # erro aparece como se fosse do codigo em vez da ferramenta ausente.
+          if ! python3 -c "import yaml" 2>/dev/null; then
+            pip install --quiet --disable-pip-version-check pyyaml 2>/dev/null || true
+          fi
+
+          if python3 -c "import yaml" 2>/dev/null; then
+            while IFS= read -r f; do
+              # O nome vai por argv: caminho com aspas quebraria a interpolacao.
+              if ! saida=$(python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$f" 2>&1); then
+                echo "::error file=$f::YAML invalido: $(echo "$saida" | tail -1)"
+                erros=1
+              fi
+            done < <(find . -path ./.git -prune -o \( -name '*.yml' -o -name '*.yaml' \) -print)
+          else
+            echo "::warning::pyyaml indisponivel no runner - validacao de YAML pulada"
+          fi
+
           while IFS= read -r f; do
-            python3 -c "import yaml,sys; yaml.safe_load(open('$f'))" 2>/dev/null || { echo "::error file=$f::YAML inválido"; erros=1; }
-          done < <(find . -path ./.git -prune -o \( -name '*.yml' -o -name '*.yaml' \) -print)
-          while IFS= read -r f; do
-            python3 -c "import json,sys; json.load(open('$f'))" 2>/dev/null || { echo "::error file=$f::JSON inválido"; erros=1; }
+            if ! saida=$(python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>&1); then
+              echo "::error file=$f::JSON invalido: $(echo "$saida" | tail -1)"
+              erros=1
+            fi
           done < <(find . -path ./.git -prune -o -name '*.json' -print)
+
           exit $erros
 
       - name: sintaxe dos scripts shell

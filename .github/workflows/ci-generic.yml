@@ -42,12 +42,7 @@ jobs:
               # mkdocs, !Ref/!GetAtt do CloudFormation). O arquivo e valido; so
               # nao e "seguro" no sentido do safe_load. Ignorar tag desconhecida
               # preserva a checagem de sintaxe sem inventar falso positivo.
-              if ! saida=$(python3 -c "
-import yaml, sys
-class L(yaml.SafeLoader): pass
-L.add_multi_constructor('', lambda l, s, n: None)
-yaml.load(open(sys.argv[1]), Loader=L)
-" "$f" 2>&1); then
+              if ! saida=$(python3 -c "import yaml,sys; yaml.SafeLoader.add_multi_constructor('', lambda l,s,n: None); yaml.safe_load(open(sys.argv[1]))" "$f" 2>&1); then
                 echo "::error file=$f::YAML invalido: $(echo "$saida" | tail -1)"
                 erros=1
               fi

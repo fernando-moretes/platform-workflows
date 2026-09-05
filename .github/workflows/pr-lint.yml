@@ -71,6 +71,15 @@ jobs:
       - name: valida o prefixo
         run: |
           BRANCH="${{ github.head_ref }}"
+          # `dependabot/...` entra na lista porque o nome e gerado pelo bot e
+          # nao ha como faze-lo seguir a convencao. Guardar o job por
+          # `github.actor` seria pior: quem reabre um PR do dependabot vira o
+          # actor, o guard nao pega e a checagem reprova um branch que ela
+          # deveria aceitar.
+          if [[ "$BRANCH" == dependabot/* ]]; then
+            echo "branch '$BRANCH' gerado pelo dependabot — convenção não se aplica"
+            exit 0
+          fi
           if [[ ! "$BRANCH" =~ ^(feat|fix|chore|docs|hotfix|refactor|test|ci)/[a-z0-9._-]+$ ]]; then
             echo "::error::branch '$BRANCH' fora do padrão <tipo>/<escopo-em-kebab-case>"
             echo "Tipos aceitos: feat, fix, chore, docs, hotfix, refactor, test, ci"

@@ -50,11 +50,36 @@ jobs:
       # O gitleaks em si e open source e roda sem licenca nenhuma.
       - id: gitleaks
         continue-on-error: true
+        env:
+          EVENTO: ${{ github.event_name }}
+          ANTES: ${{ github.event.before }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          E_FORK: ${{ github.event.repository.fork }}
         run: |
           VER=8.21.2
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
             | tar xz -C /tmp gitleaks
-          /tmp/gitleaks detect --source . --no-banner \
+          # Varrer o historico inteiro a cada push custava 14 minutos por
+          # repositorio e monopolizava um dos quatro runners. O que muda num
+          # push sao os commits novos — e o historico antigo ja foi varrido no
+          # push anterior. Entao:
+          #   push / PR  → so o intervalo novo  (segundos)
+          #   schedule / dispatch → historico completo (a auditoria periodica)
+          #   fork → so a arvore de trabalho: o historico e do upstream, e
+          #          chave de exemplo em fixture de projeto alheio nao e
+          #          vazamento nosso. Era isso que barrava 19 repos no gate.
+          ESCOPO=()
+          if [[ "$E_FORK" == "true" ]]; then
+            ESCOPO=(--no-git); echo "fork: varrendo so a arvore de trabalho"
+          elif [[ "$EVENTO" == "pull_request" && -n "$BASE_PR" ]]; then
+            ESCOPO=(--log-opts="$BASE_PR..HEAD"); echo "PR: varrendo $BASE_PR..HEAD"
+          elif [[ "$EVENTO" == "push" && -n "$ANTES" && "$ANTES" != 0000000000000000000000000000000000000000 ]] \
+               && git cat-file -e "$ANTES^{commit}" 2>/dev/null; then
+            ESCOPO=(--log-opts="$ANTES..HEAD"); echo "push: varrendo $ANTES..HEAD"
+          else
+            echo "historico completo (${EVENTO})"
+          fi
+          /tmp/gitleaks detect --source . --no-banner "${ESCOPO[@]}" \
             --report-format sarif --report-path results.sarif
       - uses: actions/upload-artifact@v7
         if: always()
@@ -150,12 +175,23 @@ jobs:
           DD_TOKEN: ${{ secrets.DEFECTDOJO_TOKEN }}
         run: |
           set -uo pipefail
+          # O prefixo do nome e a taxonomia da org (app-, svc-, tool-, ref-,
+          # lab-, lib-, infra-, dot-). Vira o Product Type no DefectDojo; sem
+          # isso o auto_create joga tudo em "Research and Development".
+          case "${{ inputs.product_name }}" in
+            app-*) TIPO="Aplicações" ;;    svc-*) TIPO="Serviços" ;;
+            tool-*) TIPO="Ferramentas" ;;  ref-*) TIPO="Referência" ;;
+            lab-*) TIPO="Laboratório" ;;   lib-*) TIPO="Bibliotecas" ;;
+            infra-*) TIPO="Infraestrutura" ;; dot-*) TIPO="Dotfiles" ;;
+            platform*) TIPO="Plataforma" ;; *) TIPO="Outros" ;;
+          esac
           enviar() { # <arquivo> <tipo no DefectDojo>
             [[ -f "$1" ]] || { echo "sem $1 — nada a enviar"; return 0; }
             curl -sS -X POST "$DD_HOST/api/v2/import-scan/" \
               -H "Authorization: Token $DD_TOKEN" \
               -F "scan_type=$2" -F "file=@$1" \
               -F "product_name=${{ inputs.product_name }}" \
+              -F "product_type_name=$TIPO" \
               -F "engagement_name=CI" -F "auto_create_context=true" \
               -F "active=true" -F "verified=false" \
               -F "branch_tag=${{ github.ref_name }}" \

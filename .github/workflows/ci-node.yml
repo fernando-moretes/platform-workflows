@@ -59,6 +59,16 @@ jobs:
             else                               PM=npm; fi
           fi
           echo "pm=$PM" >> "$GITHUB_OUTPUT"
+          # `packageManager` no package.json fixa a versao, e a action recusa
+          # receber as duas: "Multiple versions of pnpm specified". Quem manda e
+          # o repositorio — versao fixada aqui envelhece e quebra o CI de quem
+          # subir o pnpm, que foi exatamente o que aconteceu com pnpm@11.
+          if [[ -f package.json ]] && grep -q '"packageManager"' package.json; then
+            echo "pm_fixado=sim" >> "$GITHUB_OUTPUT"
+            echo "::notice::versao do pnpm vem do packageManager do package.json"
+          else
+            echo "pm_fixado=" >> "$GITHUB_OUTPUT"
+          fi
           # O cache do setup-node aponta para o lockfile; sem lockfile a acao
           # falha com "Some specified paths were not resolved" e derruba o job
           # inteiro por uma otimizacao que nem era possivel. So liga o cache
@@ -73,7 +83,10 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         if: steps.pm.outputs.pkg == 'sim' && steps.pm.outputs.pm == 'pnpm'
-        with: { version: 9 }
+        with:
+          # Vazio = deixa a action ler o packageManager. So cai no 9 quando o
+          # repositorio nao fixa versao nenhuma.
+          version: ${{ steps.pm.outputs.pm_fixado == 'sim' && '' || '9' }}
 
       - uses: actions/setup-node@v4
         with:
@@ -94,7 +107,7 @@ jobs:
 
       - name: lint
         id: lint
-        if: always() && steps.pm.outputs.pkg == 'sim'
+        if: always() && steps.pm.outputs.pkg == 'sim' && steps.instala.outcome == 'success'
         run: |
           if npm run | grep -qE '^  lint'; then
             ${{ steps.pm.outputs.pm }} run lint
@@ -104,7 +117,7 @@ jobs:
 
       - name: typecheck
         id: typecheck
-        if: always() && steps.pm.outputs.pkg == 'sim'
+        if: always() && steps.pm.outputs.pkg == 'sim' && steps.instala.outcome == 'success'
         run: |
           if npm run | grep -qE '^  typecheck'; then
             ${{ steps.pm.outputs.pm }} run typecheck
@@ -116,7 +129,7 @@ jobs:
 
       - name: testes
         id: testes
-        if: always() && steps.pm.outputs.pkg == 'sim'
+        if: always() && steps.pm.outputs.pkg == 'sim' && steps.instala.outcome == 'success'
         run: |
           if npm run | grep -qE '^  test'; then
             ${{ steps.pm.outputs.pm }} run test
@@ -126,7 +139,7 @@ jobs:
 
       - name: build
         id: build
-        if: always() && inputs.run_build && steps.pm.outputs.pkg == 'sim'
+        if: always() && inputs.run_build && steps.pm.outputs.pkg == 'sim' && steps.instala.outcome == 'success'
         run: |
           if npm run | grep -qE '^  build'; then
             ${{ steps.pm.outputs.pm }} run build
@@ -165,7 +178,12 @@ jobs:
               linha "testes"    "${{ steps.testes.outcome }}"
               linha "build"     "${{ steps.build.outcome }}"
               echo
-              echo "_Etapa pulada aqui significa script ausente no \`package.json\`, não sucesso._"
+              if [[ "${{ steps.instala.outcome }}" != "success" ]]; then
+                echo "> ⚠️ **A instalação não passou, então lint, typecheck, testes e build nem rodaram.**"
+                echo "> Nada aqui foi verificado nesta execução — verde nas outras linhas seria mentira."
+              else
+                echo "_Etapa pulada aqui significa script ausente no \`package.json\`, não sucesso._"
+              fi
             fi
             echo
             echo "commit [\`${GITHUB_SHA:0:8}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) · \`${{ github.ref_name }}\` · por **${{ github.actor }}**"

@@ -37,7 +37,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working_directory }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: detecta o gerenciador de pacotes
         id: pm

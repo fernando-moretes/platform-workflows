@@ -42,7 +42,7 @@ jobs:
     outputs:
       vazou: ${{ steps.gitleaks.outcome == 'failure' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       # O binario, nao a acao: gitleaks-action@v2 exige licenca paga quando o
       # repositorio pertence a uma organizacao, e falhava com "missing gitleaks
@@ -67,7 +67,7 @@ jobs:
     name: dependências vulneráveis
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # O binario, nao a acao. trivy-action resolve a versao por um arquivo de
       # metadados no repositorio dela, e toda tag que testei devolveu "Missing
       # download info" — uma dependencia externa a mais para uma ferramenta que
@@ -113,7 +113,7 @@ jobs:
     if: inputs.sonar_host != ''
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       # v6 porque a v4 saiu de suporte e o proprio run avisa que ela carrega
       # uma vulnerabilidade. Um scanner de seguranca desatualizado e a pior
@@ -205,7 +205,7 @@ jobs:
     steps:
       # O script mora aqui mesmo, neste repositório: em arquivo .py de verdade
       # ele é testável fora do CI, coisa que heredoc dentro de YAML não é.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: fernando-moretes/platform-workflows
           ref: main

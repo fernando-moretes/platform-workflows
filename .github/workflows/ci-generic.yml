@@ -22,7 +22,7 @@ jobs:
   ci:
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: YAML e JSON válidos
         run: |

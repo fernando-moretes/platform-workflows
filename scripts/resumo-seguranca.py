@@ -90,14 +90,33 @@ def ler_sarif(caminho: pathlib.Path):
                 linha = fis.get("region", {}).get("startLine", "")
                 onde = f"{arq}:{linha}".rstrip(":")
             msg = (res.get("message", {}).get("text") or "").strip().replace("\n", " ")
-            achados.append((sev, rid, onde, msg[:110]))
+            # O trivy poe pacote e versao no texto da mensagem, em linhas
+            # "Package: x" / "Installed Version: y" / "Fixed Version: z". Sem
+            # isso o relatorio diz que ha uma CVE, mas nao o que atualizar —
+            # que e a unica coisa acionavel.
+            det = {}
+            for campo, chave in [("Package:", "pacote"),
+                                 ("Installed Version:", "instalada"),
+                                 ("Fixed Version:", "correcao")]:
+                if campo in msg:
+                    det[chave] = msg.split(campo, 1)[1].strip().split(" ")[0].rstrip(",")
+            titulo = (regra.get("shortDescription", {}).get("text")
+                      or regra.get("help", {}).get("text", "").split("\n")[0]
+                      or msg)
+            achados.append({
+                "sev": sev, "regra": rid, "onde": onde,
+                "msg": msg[:400], "titulo": titulo.strip()[:130],
+                "pacote": det.get("pacote", ""), "instalada": det.get("instalada", ""),
+                "correcao": det.get("correcao", ""),
+                "url": (regra.get("helpUri") or ""),
+            })
     return achados
 
 
 def contar(achados):
     c = dict.fromkeys(ORDEM, 0)
-    for sev, *_ in achados:
-        c[sev if sev in c else "?"] += 1
+    for a in achados:
+        c[a["sev"] if a["sev"] in c else "?"] += 1
     return c
 
 
@@ -156,23 +175,59 @@ def main() -> int:
           "histórico: o commit sai do repositório, o segredo já vazou.")
         w()
 
-    # Lista longa não é lida, e o resto está no SARIF.
-    todos = sorted((tv or []) + (gl or []),
-                   key=lambda a: ORDEM.index(a[0] if a[0] in ORDEM else "?"))
+    # A lista COMPLETA, agrupada por severidade e dobrada em <details>: um
+    # relatório que corta em 15 obriga a baixar o SARIF para ver o resto, e aí
+    # ninguém vê. Dobrado, cabe na página sem atrapalhar quem só quer o número.
+    todos = (tv or []) + (gl or [])
     if todos:
-        w("<details><summary>As 15 mais graves</summary>")
+        w("### Todas as vulnerabilidades encontradas")
         w()
-        w("| sev | regra | onde | o quê |")
-        w("|---|---|---|---|")
-        for sev, rid, onde, msg in todos[:15]:
-            w(f"| `{sev}` | `{rid}` | `{onde or '—'}` | {msg or '—'} |")
-        if len(todos) > 15:
+        for sev in ORDEM:
+            grupo = [a for a in todos if a["sev"] == sev]
+            if not grupo:
+                continue
+            marca = "🔴" if sev == "CRITICAL" else "🟠" if sev == "HIGH" else \
+                    "🟡" if sev == "MEDIUM" else "⚪"
+            aberto = " open" if sev in ("CRITICAL", "HIGH") else ""
+            w(f"<details{aberto}><summary>{marca} <b>{sev}</b> — {len(grupo)} achado(s)</summary>")
             w()
-            w(f"_… e mais {len(todos) - 15}. O SARIF completo está nos artefatos do run "
-              "e em Security → Code scanning._")
-        w()
-        w("</details>")
-        w()
+            # Só mostra as colunas de pacote quando há pacote: em achado de
+            # configuração (Terraform, Dockerfile) elas ficariam vazias e a
+            # tabela viraria ruído.
+            tem_pacote = any(a["pacote"] for a in grupo)
+            if tem_pacote:
+                w("| id | pacote | instalada | corrigida em | onde |")
+                w("|---|---|---|---|---|")
+            else:
+                w("| id | o quê | onde |")
+                w("|---|---|---|")
+            for a in sorted(grupo, key=lambda x: (x["pacote"] or "", x["regra"])):
+                ident = f"[`{a['regra']}`]({a['url']})" if a["url"] else f"`{a['regra']}`"
+                if tem_pacote:
+                    correcao = f"**{a['correcao']}**" if a["correcao"] else "_sem correção publicada_"
+                    w(f"| {ident} | `{a['pacote'] or '—'}` | `{a['instalada'] or '—'}` "
+                      f"| {correcao} | `{a['onde'] or '—'}` |")
+                else:
+                    w(f"| {ident} | {a['titulo'] or a['msg'][:110] or '—'} | `{a['onde'] or '—'}` |")
+            w()
+            w("</details>")
+            w()
+
+        # O que dá para resolver hoje: pacote com versão corrigida publicada.
+        corrigiveis = {}
+        for a in todos:
+            if a["correcao"] and a["pacote"]:
+                chave = (a["pacote"], a["instalada"])
+                corrigiveis.setdefault(chave, set()).add(a["correcao"])
+        if corrigiveis:
+            w(f"**{len(corrigiveis)} pacote(s) com correção já publicada** — é o que dá "
+              "para resolver hoje, subindo a versão:")
+            w()
+            w("| pacote | está em | subir para |")
+            w("|---|---|---|")
+            for (pkg, inst), versoes in sorted(corrigiveis.items()):
+                w(f"| `{pkg}` | `{inst or '—'}` | `{', '.join(sorted(versoes))}` |")
+            w()
 
     # ----------------------------------------------------------------- Sonar
     sonar_host = (env("SONAR_HOST", "") or "").rstrip("/")

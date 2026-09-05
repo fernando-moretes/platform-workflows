@@ -19,43 +19,50 @@ on:
         type: number
         default: 50
 
-# `read`, nao `write`. A unica coisa aqui que fala com a API do PR e a action
-# de titulo, e ela so precisa LER o titulo. Pedir escrita custava caro no lugar
-# errado: PR do dependabot recebe token somente-leitura, e o GitHub valida o que
-# cada reusable workflow pede ao LER o arquivo — antes de qualquer `if:`. Um
-# `write` que ninguem usava derrubava o run inteiro, sem rodar lint nem CI.
+# Nada de `pull-requests` aqui, nem read. O repositorio roda com
+# `default_workflow_permissions: read`, que trava pull-requests em `none` — e o
+# GitHub valida o que cada reusable workflow PEDE ao ler o arquivo, antes de
+# qualquer `if:`. Pedir uma permissao que o teto nao concede derrubava TODO PR
+# em startup_failure, sem rodar lint nem CI, humano ou bot.
+#
+# O titulo vem do payload do evento, entao nao ha API a chamar nem permissao a
+# pedir. Baixar o teto e a correcao certa; afrouxar o teto do repositorio para
+# checar um titulo seria pagar caro por pouco.
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   titulo:
     name: título segue Conventional Commits
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - uses: amannn/action-semantic-pull-request@v5
+      # Regex no shell, e nao a action-semantic-pull-request: a action fala com
+      # a API do PR e por isso exige `pull-requests: read`, permissao que o teto
+      # do repositorio nao concede. O titulo ja chega inteiro no payload, e o
+      # job de branch logo abaixo valida do mesmo jeito — uma dependencia
+      # externa a menos para conferir uma string.
+      - name: valida o título
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          types: |
-            feat
-            fix
-            chore
-            docs
-            test
-            refactor
-            ci
-            style
-            perf
-            build
-            revert
-          requireScope: false
-          # O merge de PR vira o commit em main, e é dele que a versão sai.
-          subjectPattern: ^(?![A-Z])(?!.*\.$).+$
-          subjectPatternError: |
-            A descrição "{subject}" precisa começar em minúscula e não terminar
-            com ponto. O título do PR vira o commit em main, e é dele que a
-            versão é calculada.
+          TITULO: ${{ github.event.pull_request.title }}
+        run: |
+          TIPOS="feat|fix|chore|docs|test|refactor|ci|style|perf|build|revert"
+          if [[ ! "$TITULO" =~ ^($TIPOS)(\([a-z0-9._/-]+\))?!?:\ .+$ ]]; then
+            echo "::error::título '$TITULO' fora de Conventional Commits"
+            echo "Esperado: <tipo>(escopo opcional): descrição"
+            echo "Tipos aceitos: ${TIPOS//|/, }"
+            exit 1
+          fi
+          DESCRICAO="${TITULO#*: }"
+          # O merge do PR vira o commit em main, e e dele que a versao sai.
+          if [[ "$DESCRICAO" =~ ^[A-Z] ]]; then
+            echo "::error::a descrição precisa começar em minúscula"
+            exit 1
+          fi
+          if [[ "$DESCRICAO" == *. ]]; then
+            echo "::error::a descrição não termina com ponto"
+            exit 1
+          fi
+          echo "título ok: $TITULO"
 
   branch:
     name: nome do branch segue a convenção

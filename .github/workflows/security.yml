@@ -133,7 +133,7 @@ jobs:
     needs: [segredos, dependencias]
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { path: relatorios }
       - name: importa os achados
         env:
@@ -162,7 +162,7 @@ jobs:
     if: always()
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with: { path: relatorios }
       - name: só segredo vazado barra o merge
@@ -201,7 +201,7 @@ jobs:
           repository: fernando-moretes/platform-workflows
           ref: main
           path: .orquestrador
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with: { path: relatorios }
       - name: monta o resumo

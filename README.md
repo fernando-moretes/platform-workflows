@@ -22,6 +22,34 @@ só os arquivos que precisam ser alcançáveis de fora.
 | `security.yml` | gitleaks, trivy, SonarQube, envio ao DefectDojo | só segredo vazado |
 | `release.yml` | calcula SemVer dos commits, cria tag e release com changelog | — |
 
+## O resumo no Actions
+
+`ci-node.yml` e `security.yml` escrevem no **Summary** do run — a primeira aba
+que abre quando você clica na execução. A ideia é não precisar entrar job por
+job para saber o que aconteceu:
+
+- **CI**: uma tabela com o desfecho das cinco etapas (instala, lint, typecheck,
+  testes, build). Como cada etapa roda mesmo se a anterior falhou, o valor está
+  em ver as cinco juntas. Etapa "pulada" ali significa script ausente no
+  `package.json` — não sucesso, e o texto diz isso.
+- **Segurança**: contagem por severidade de cada SARIF (gitleaks e trivy), as 15
+  mais graves com regra e arquivo:linha, o quality gate do Sonar com as
+  condições que reprovaram, e a fila aberta no DefectDojo por severidade — com
+  link direto para os dois.
+
+O resumo de segurança é `scripts/resumo-seguranca.py`, em arquivo de verdade e
+não em heredoc dentro do YAML, porque assim dá para rodar fora do CI:
+
+```bash
+DIR_RELATORIOS=./relatorios PRODUTO=meu-repo python3 scripts/resumo-seguranca.py
+```
+
+Ele **nunca reprova o run**. Quem barra merge é o job `gate`, e só por segredo
+vazado. Se o Sonar ou o DefectDojo não responderem — os dois são hosts de rede
+local e não existem para runner do GitHub — o resumo diz qual consulta faltou em
+vez de pintar de vermelho um run que passou. E "sem relatório" nunca é
+apresentado como "limpo": são coisas diferentes.
+
 ## Como chamar
 
 ```yaml

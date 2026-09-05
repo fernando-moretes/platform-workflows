@@ -82,6 +82,7 @@ jobs:
           cache-dependency-path: ${{ steps.pm.outputs.lock == 'sim' && format('{0}/*lock*', inputs.working_directory) || '' }}
 
       - name: instala
+        id: instala
         if: steps.pm.outputs.pkg == 'sim'
         run: |
           case "${{ steps.pm.outputs.pm }}" in
@@ -92,6 +93,7 @@ jobs:
           esac
 
       - name: lint
+        id: lint
         if: always() && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  lint'; then
@@ -101,6 +103,7 @@ jobs:
           fi
 
       - name: typecheck
+        id: typecheck
         if: always() && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  typecheck'; then
@@ -112,6 +115,7 @@ jobs:
           fi
 
       - name: testes
+        id: testes
         if: always() && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  test'; then
@@ -121,6 +125,7 @@ jobs:
           fi
 
       - name: build
+        id: build
         if: always() && inputs.run_build && steps.pm.outputs.pkg == 'sim'
         run: |
           if npm run | grep -qE '^  build'; then
@@ -128,3 +133,40 @@ jobs:
           else
             echo "::notice::sem script 'build' — etapa pulada"
           fi
+
+      # Sem isto, saber se o lint passou exige abrir o job e rolar o log. O
+      # `if: always()` de cada etapa acima só tem valor se o desfecho das cinco
+      # aparecer junto — que é o ponto de rodar todas mesmo com uma falhando.
+      - name: resumo do CI
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "## 🧪 CI — ${{ github.event.repository.name }}"
+            echo
+            echo "Node ${{ inputs.node_version }} · \`${{ steps.pm.outputs.pm }}\` · runner \`${{ runner.name }}\`"
+            echo
+            if [[ "${{ steps.pm.outputs.pkg }}" != "sim" ]]; then
+              echo "> Sem \`package.json\` — este repositório não é um projeto Node e as etapas foram puladas."
+            else
+              echo "| etapa | resultado |"
+              echo "|---|---|"
+              linha() { # <rótulo> <outcome>
+                case "$2" in
+                  success)  echo "| $1 | ✅ passou |" ;;
+                  failure)  echo "| $1 | ❌ **falhou** |" ;;
+                  skipped)  echo "| $1 | ⏭️ pulada |" ;;
+                  *)        echo "| $1 | ⚪ \`${2:-?}\` |" ;;
+                esac
+              }
+              linha "instala"   "${{ steps.instala.outcome }}"
+              linha "lint"      "${{ steps.lint.outcome }}"
+              linha "typecheck" "${{ steps.typecheck.outcome }}"
+              linha "testes"    "${{ steps.testes.outcome }}"
+              linha "build"     "${{ steps.build.outcome }}"
+              echo
+              echo "_Etapa pulada aqui significa script ausente no \`package.json\`, não sucesso._"
+            fi
+            echo
+            echo "commit [\`${GITHUB_SHA:0:8}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) · \`${{ github.ref_name }}\` · por **${{ github.actor }}**"
+          } >> "$GITHUB_STEP_SUMMARY"

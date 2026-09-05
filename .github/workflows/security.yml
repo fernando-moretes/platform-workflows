@@ -181,3 +181,44 @@ jobs:
           fi
           echo "::error::segredo detectado no histórico — rotacione a credencial ANTES de remover o commit"
           exit 1
+
+  # Um relatório que exige abrir seis jobs para ser lido não é um relatório.
+  # Este job junta tudo na página do próprio run: quais etapas passaram, o que
+  # cada SARIF encontrou, o quality gate do Sonar e a fila aberta no DefectDojo.
+  #
+  # NUNCA reprova — quem barra é o job `gate`. Todo `continue-on-error` aqui é
+  # deliberado: relatório que derruba run vira relatório que se desliga.
+  resumo:
+    name: resumo do run
+    needs: [segredos, dependencias, sonar, consolida, gate]
+    if: always()
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      # O script mora aqui mesmo, neste repositório: em arquivo .py de verdade
+      # ele é testável fora do CI, coisa que heredoc dentro de YAML não é.
+      - uses: actions/checkout@v4
+        with:
+          repository: fernando-moretes/platform-workflows
+          ref: main
+          path: .orquestrador
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { path: relatorios }
+      - name: monta o resumo
+        continue-on-error: true
+        env:
+          DIR_RELATORIOS: relatorios
+          PRODUTO: ${{ inputs.product_name }}
+          SONAR_HOST: ${{ inputs.sonar_host }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          DD_HOST: ${{ inputs.defectdojo_host }}
+          DD_TOKEN: ${{ secrets.DEFECTDOJO_TOKEN }}
+          R_SEGREDOS: ${{ needs.segredos.result }}
+          R_DEPS: ${{ needs.dependencias.result }}
+          R_SONAR: ${{ needs.sonar.result }}
+          R_DD: ${{ needs.consolida.result }}
+          R_GATE: ${{ needs.gate.result }}
+        run: |
+          command -v python3 >/dev/null || {
+            echo "::warning::sem python3 no runner — resumo não gerado"; exit 0; }
+          python3 .orquestrador/scripts/resumo-seguranca.py

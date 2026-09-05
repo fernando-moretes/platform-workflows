@@ -84,7 +84,7 @@ jobs:
           fi
           echo "gerenciador: $PM"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.pm.outputs.pkg == 'sim' && steps.pm.outputs.pm == 'pnpm'
         with:
           # Vazio = a action le o packageManager do package.json. So vem "9"

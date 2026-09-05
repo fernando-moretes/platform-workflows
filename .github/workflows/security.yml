@@ -115,7 +115,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: SonarSource/sonarqube-scan-action@v4
+      # v6 porque a v4 saiu de suporte e o proprio run avisa que ela carrega
+      # uma vulnerabilidade. Um scanner de seguranca desatualizado e a pior
+      # forma de dividas: ele passa verde enquanto e a propria porta aberta.
+      - uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_HOST_URL: ${{ inputs.sonar_host }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -50,6 +50,12 @@ jobs:
       # O gitleaks em si e open source e roda sem licenca nenhuma.
       - id: gitleaks
         continue-on-error: true
+        # Teto no PASSO, nao no job: com continue-on-error o passo que estoura
+        # vira "falhou" e o job segue — sem SARIF, o gate ja trata como
+        # ferramenta quebrada e nao barra. Sem este teto, um repositorio de
+        # historico grande segurou o runner por 22 min ate ser morto por fora,
+        # e o job inteiro ficou vermelho por causa do gitleaks, nao de segredo.
+        timeout-minutes: 12
         env:
           EVENTO: ${{ github.event_name }}
           ANTES: ${{ github.event.before }}
@@ -76,6 +82,11 @@ jobs:
           elif [[ "$EVENTO" == "push" && -n "$ANTES" && "$ANTES" != 0000000000000000000000000000000000000000 ]] \
                && git cat-file -e "$ANTES^{commit}" 2>/dev/null; then
             ESCOPO=(--log-opts="$ANTES..HEAD"); echo "push: varrendo $ANTES..HEAD"
+          elif [[ "$EVENTO" == "workflow_dispatch" ]]; then
+            # Dispatch e "roda de novo agora", nao auditoria: quem roda a mao
+            # quer resultado em minutos. A varredura completa fica para o
+            # schedule. 500 commits cobrem meses de qualquer repositorio daqui.
+            ESCOPO=(--log-opts="-n 500"); echo "dispatch: varrendo os ultimos 500 commits"
           else
             echo "historico completo (${EVENTO})"
           fi

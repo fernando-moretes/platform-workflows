@@ -28,7 +28,11 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      # Pinado na release exata de proposito: o astral-sh/setup-uv nao publica
+      # a tag movel `v10`, so `v10.0.0` e `v10.0.1`. Com `@v10` o run morre em
+      # "Set up job" (unable to resolve action), antes de rodar qualquer codigo
+      # — foi o que derrubou todo repositorio Python da frota.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
           enable-cache: true

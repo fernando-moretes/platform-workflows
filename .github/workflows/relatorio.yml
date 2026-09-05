@@ -1,0 +1,62 @@
+# O relatorio final do run: o que passou, o que quebrou, quanto demorou.
+#
+# Roda como ultimo job e le o proprio run pela API, entao enxerga TODOS os jobs
+# — CI, seguranca, release — numa tabela so. Nao precisa que ninguem instrumente
+# etapa nenhuma, e workflow novo entra no relatorio sem alterar este arquivo.
+#
+# NUNCA reprova. Relatorio que derruba run vira relatorio que se desliga.
+name: relatorio
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: '["self-hosted","homelab"]'
+      retencao:
+        description: dias que o artefato html sobrevive
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  relatorio:
+    name: relatório do run
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      # O script mora no orquestrador, nao no repositorio chamador: assim uma
+      # correcao no relatorio alcanca os 93 repositorios no push seguinte, sem
+      # rollout. E em .py de verdade, que da para testar fora do CI — coisa que
+      # heredoc dentro de YAML nao da.
+      - uses: actions/checkout@v7
+        with:
+          repository: fernando-moretes/platform-workflows
+          ref: main
+          path: .orquestrador
+
+      # Os artefatos dos jobs anteriores (SARIF da seguranca, JUnit dos testes)
+      # alimentam as secoes de vulnerabilidade e de teste. Se nao houver nenhum,
+      # o relatorio simplesmente omite essas secoes.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          path: relatorios
+
+      - name: monta o relatório
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIR_RELATORIOS: relatorios
+          SAIDA_HTML: relatorio.html
+        run: python3 .orquestrador/scripts/relatorio.py
+
+      - uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: relatorio
+          path: relatorio.html
+          retention-days: ${{ inputs.retencao }}
+          if-no-files-found: warn

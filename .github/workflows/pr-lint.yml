@@ -19,9 +19,14 @@ on:
         type: number
         default: 50
 
+# `read`, nao `write`. A unica coisa aqui que fala com a API do PR e a action
+# de titulo, e ela so precisa LER o titulo. Pedir escrita custava caro no lugar
+# errado: PR do dependabot recebe token somente-leitura, e o GitHub valida o que
+# cada reusable workflow pede ao LER o arquivo — antes de qualquer `if:`. Um
+# `write` que ninguem usava derrubava o run inteiro, sem rodar lint nem CI.
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   titulo:

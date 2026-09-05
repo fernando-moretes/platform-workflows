@@ -91,7 +91,7 @@ jobs:
           # quando o repositorio nao fixa versao nenhuma.
           version: ${{ steps.pm.outputs.pnpm_ver }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ inputs.node_version }}
           cache: ${{ steps.pm.outputs.lock == 'sim' && steps.pm.outputs.pm || '' }}

@@ -107,6 +107,9 @@ jobs:
 
   sonar:
     name: qualidade (SonarQube)
+    # Informa, nao trava: a decisao e do dono do repositorio, e um gate ligado
+    # antes de a fila de achados ser zerada so ensina a ignorar o gate.
+    continue-on-error: true
     if: inputs.sonar_host != ''
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
@@ -129,6 +132,9 @@ jobs:
 
   consolida:
     name: envia ao DefectDojo
+    # Idem: o envio e telemetria. DefectDojo fora do ar nao pode reprovar
+    # codigo que ninguem chegou a analisar.
+    continue-on-error: true
     if: inputs.defectdojo_host != '' && always()
     needs: [segredos, dependencias]
     runs-on: ${{ fromJSON(inputs.runner) }}

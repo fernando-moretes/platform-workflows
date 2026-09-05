@@ -63,11 +63,14 @@ jobs:
           # receber as duas: "Multiple versions of pnpm specified". Quem manda e
           # o repositorio — versao fixada aqui envelhece e quebra o CI de quem
           # subir o pnpm, que foi exatamente o que aconteceu com pnpm@11.
+          # A versao sai daqui pronta, e nao de um ternario na expressao do
+          # Actions: la, `cond && '' || '9'` devolve '9', porque string vazia e
+          # falsy e o `||` sempre entra. No shell, vazio e vazio.
           if [[ -f package.json ]] && grep -q '"packageManager"' package.json; then
-            echo "pm_fixado=sim" >> "$GITHUB_OUTPUT"
+            echo "pnpm_ver=" >> "$GITHUB_OUTPUT"
             echo "::notice::versao do pnpm vem do packageManager do package.json"
           else
-            echo "pm_fixado=" >> "$GITHUB_OUTPUT"
+            echo "pnpm_ver=9" >> "$GITHUB_OUTPUT"
           fi
           # O cache do setup-node aponta para o lockfile; sem lockfile a acao
           # falha com "Some specified paths were not resolved" e derruba o job
@@ -84,9 +87,9 @@ jobs:
       - uses: pnpm/action-setup@v4
         if: steps.pm.outputs.pkg == 'sim' && steps.pm.outputs.pm == 'pnpm'
         with:
-          # Vazio = deixa a action ler o packageManager. So cai no 9 quando o
-          # repositorio nao fixa versao nenhuma.
-          version: ${{ steps.pm.outputs.pm_fixado == 'sim' && '' || '9' }}
+          # Vazio = a action le o packageManager do package.json. So vem "9"
+          # quando o repositorio nao fixa versao nenhuma.
+          version: ${{ steps.pm.outputs.pnpm_ver }}
 
       - uses: actions/setup-node@v4
         with:

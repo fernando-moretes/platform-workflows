@@ -42,7 +42,11 @@ jobs:
         run: |
           set -euo pipefail
           PREFIX="${{ inputs.tag_prefix }}"
-          ULTIMA=$(git tag --list "${PREFIX}*" --sort=-v:refname | head -1)
+          # `sed -n 1p` e nao `head -1`: o head fecha o pipe depois da primeira
+          # linha e, num repositorio com milhares de tags (litellm), o git tag
+          # ainda esta escrevendo — leva SIGPIPE, e com `pipefail` o passo morre
+          # com 141 sem nenhuma mensagem. O sed le tudo ate o fim.
+          ULTIMA=$(git tag --list "${PREFIX}*" --sort=-v:refname | sed -n '1p')
 
           if [[ -z "$ULTIMA" ]]; then
             RANGE=""

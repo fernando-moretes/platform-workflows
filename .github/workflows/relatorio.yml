@@ -66,8 +66,10 @@ jobs:
       # (MATTERMOST_WEBHOOK, de organizacao); sem ele o passo e pulado — e a
       # razao de o chamador precisar de `secrets: inherit` neste job. O runner
       # e self-hosted na LAN, entao mattermost.home.lab e alcancavel.
+      # So no runner self-hosted: repositorio publico roda no runner do GitHub,
+      # que nao alcanca mattermost.home.lab — avisar de la so gera warning.
       - name: avisa no Mattermost
-        if: env.WEBHOOK != ''
+        if: env.WEBHOOK != '' && runner.environment == 'self-hosted'
         continue-on-error: true
         env:
           WEBHOOK: ${{ secrets.MATTERMOST_WEBHOOK }}

@@ -4,7 +4,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: platform-workflows
-  description: Workflows reutilizaveis das pipelines
+  description: "Workflows reutilizaveis das pipelines"
   annotations:
     github.com/project-slug: fernando-moretes/platform-workflows
     backstage.io/source-location: url:https://github.com/fernando-moretes/platform-workflows
@@ -17,7 +17,9 @@ metadata:
       title: SonarQube
     - url: https://defectdojo.home.lab/product?name=platform-workflows
       title: DefectDojo
-  tags: [other, ci-python.yml]
+  # tags so aceitam [a-z0-9-]: ci-python.yml (ci-node.yml) tem ponto e reprovava
+  # todo componente na policy check do Backstage.
+  tags: [other, python]
 spec:
   type: other
   lifecycle: production

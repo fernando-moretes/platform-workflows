@@ -64,7 +64,12 @@ jobs:
               echo "::error file=$f::JSON invalido: $(echo "$saida" | tail -1)"
               erros=1
             fi
-          done < <(find . -path ./.git -prune -o -name '*.json' -print)
+          done < <(find . -path ./.git -prune -o -path ./node_modules -prune -o -name '*.json' -print \
+                   | grep -vE '(^|/)(tsconfig[^/]*|jsconfig[^/]*)\.json$|(^|/)\.(vscode|devcontainer)/')
+          # tsconfig/jsconfig, .vscode e .devcontainer sao JSONC por convencao
+          # das proprias ferramentas (comentarios e virgula final); o json do
+          # Python recusa, e o lab-ollama reprovava por tsconfig do upstream.
+          # Nao sao dado — sao configuracao que o tsc/VS Code le sem reclamar.
 
           exit $erros
 

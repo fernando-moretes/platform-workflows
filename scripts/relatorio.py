@@ -349,6 +349,12 @@ def main() -> int:
     if resumo:
         with open(resumo, "a", encoding="utf-8") as f:
             f.write(md + "\n")
+    # O veredito (primeira linha do markdown, depois do "— ") vira output do
+    # passo, para o aviso no Mattermost nao recalcular nada.
+    saida = os.environ.get("GITHUB_OUTPUT")
+    if saida:
+        with open(saida, "a", encoding="utf-8") as f:
+            f.write("veredito=" + md.splitlines()[0].split("— ", 1)[-1].strip() + "\n")
     with open(SAIDA, "w", encoding="utf-8") as f:
         f.write(pagina + "\n")
     print(f"relatório pronto: {len(jobs)} jobs, html em {SAIDA}")

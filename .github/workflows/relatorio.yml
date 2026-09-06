@@ -46,6 +46,7 @@ jobs:
           path: relatorios
 
       - name: monta o relatório
+        id: rel
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,3 +61,20 @@ jobs:
           path: relatorio.html
           retention-days: ${{ inputs.retencao }}
           if-no-files-found: warn
+
+      # Uma linha no #entregas do Mattermost por run. O webhook e um secret
+      # (MATTERMOST_WEBHOOK, de organizacao); sem ele o passo e pulado — e a
+      # razao de o chamador precisar de `secrets: inherit` neste job. O runner
+      # e self-hosted na LAN, entao mattermost.home.lab e alcancavel.
+      - name: avisa no Mattermost
+        if: env.WEBHOOK != ''
+        continue-on-error: true
+        env:
+          WEBHOOK: ${{ secrets.MATTERMOST_WEBHOOK }}
+          VEREDITO: ${{ steps.rel.outputs.veredito }}
+        run: |
+          # A CA do homelab ja esta na imagem do runner; o curl confia sozinho.
+          MSG="**${{ github.repository }}** · ${VEREDITO:-?} · \`${GITHUB_REF_NAME}\` · [run ${{ github.run_number }}](${GITHUB_SERVER_URL}/${{ github.repository }}/actions/runs/${{ github.run_id }}) · por ${{ github.actor }}"
+          curl -s -o /dev/null -H 'Content-Type: application/json' \
+            -d "$(python3 -c 'import json,sys; print(json.dumps({"text": sys.argv[1], "username": "esteira"}))' "$MSG")" \
+            "$WEBHOOK" || echo "::warning::não consegui avisar no Mattermost"

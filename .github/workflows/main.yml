@@ -52,5 +52,6 @@ jobs:
       contents: read
       actions: read
     uses: fernando-moretes/platform-workflows/.github/workflows/relatorio.yml@main
+    secrets: inherit
     with:
       runner: '["ubuntu-latest"]'

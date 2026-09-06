@@ -222,6 +222,9 @@ jobs:
         continue-on-error: true
         with: { path: relatorios }
       - name: só segredo vazado barra o merge
+        env:
+          # Quem e "dono da conta" para o gate: nome e e-mail como o git grava.
+          DONOS: "fernandofatech,fernandofa89@gmail.com,Fernando Francisco Azevedo,Fernando Azevedo"
         run: |
           # `vazou` vem do outcome do gitleaks, que sai diferente de zero tanto
           # ao achar segredo quanto ao falhar sozinho. Barrar merge por
@@ -235,8 +238,37 @@ jobs:
             echo "::warning::gitleaks terminou em erro sem produzir relatório — não vou barrar o merge por falha de ferramenta"
             exit 0
           fi
-          echo "::error::segredo detectado no histórico — rotacione a credencial ANTES de remover o commit"
-          exit 1
+          # So barra segredo que e NOSSO. Boa parte da frota e copia de projeto
+          # alheio (litellm, langgraph, web-check...) e vem com fixture de teste,
+          # exemplo de doc e ate chave real de autor upstream de anos atras. Nada
+          # disso e nosso para rotacionar, e barrar por isso rendeu uma tarde de
+          # allowlist repo a repo. O gitleaks grava autor e e-mail de cada achado
+          # no SARIF; se nenhum for de um dono da conta, o achado vai para o
+          # relatorio e o DefectDojo, mas o merge segue. Autor e facil de forjar
+          # — para uma frota pessoal, e o risco certo a aceitar.
+          python3 - "$DONOS" <<'PY'
+          import json, sys
+          donos = {d.strip().lower() for d in sys.argv[1].split(",") if d.strip()}
+          nossos, alheios = [], []
+          for run in json.load(open("relatorios/gitleaks/results.sarif")).get("runs", []):
+              for r in run.get("results", []):
+                  fp = r.get("partialFingerprints", {})
+                  quem = {fp.get("author", "").lower(), fp.get("email", "").lower()}
+                  loc = r["locations"][0]["physicalLocation"]
+                  onde = f"{loc['artifactLocation']['uri']}:{loc['region'].get('startLine', '?')} ({fp.get('commitSha', '')[:8]}, {fp.get('author', '?')})"
+                  (nossos if quem & donos else alheios).append(onde)
+          for o in alheios[:10]:
+              print(f"::warning::achado de autor upstream, não barra: {o}")
+          if len(alheios) > 10:
+              print(f"::warning::… e mais {len(alheios) - 10} achados de autores upstream")
+          if not nossos:
+              print(f"{len(alheios)} achado(s), nenhum de dono da conta — não barro o merge")
+              sys.exit(0)
+          for o in nossos:
+              print(f"::error::segredo commitado por dono da conta: {o}")
+          print("::error::rotacione a credencial ANTES de remover o commit — o histórico já está exposto")
+          sys.exit(1)
+          PY
 
   # Um relatório que exige abrir seis jobs para ser lido não é um relatório.
   # Este job junta tudo na página do próprio run: quais etapas passaram, o que

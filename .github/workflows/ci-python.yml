@@ -38,6 +38,7 @@ jobs:
           enable-cache: true
 
       - name: instala dependências
+        timeout-minutes: 20
         run: |
           # Instalar no interpretador do sistema esbarra no PEP 668 ("externally
           # managed environment") nos runners Debian/Ubuntu. Um venv proprio
@@ -69,6 +70,7 @@ jobs:
 
       - name: testes
         if: always()
+        timeout-minutes: 20
         run: |
           if [[ -d tests ]] || compgen -G "test_*.py" > /dev/null || compgen -G "*_test.py" > /dev/null; then
             uv run --no-project --with pytest pytest -q

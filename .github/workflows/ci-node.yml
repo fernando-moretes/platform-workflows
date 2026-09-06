@@ -97,8 +97,12 @@ jobs:
           cache: ${{ steps.pm.outputs.lock == 'sim' && steps.pm.outputs.pm || '' }}
           cache-dependency-path: ${{ steps.pm.outputs.lock == 'sim' && format('{0}/*lock*', inputs.working_directory) || '' }}
 
+      # Teto nas etapas longas. Um `yarn install` do tool-web-check ficou 55 min
+      # pendurado e segurou um dos dois runners ate ser cancelado a mao; com o
+      # teto, vira "falhou" em 20 min e a fila anda.
       - name: instala
         id: instala
+        timeout-minutes: 20
         if: steps.pm.outputs.pkg == 'sim'
         run: |
           case "${{ steps.pm.outputs.pm }}" in
@@ -144,6 +148,7 @@ jobs:
 
       - name: testes
         id: testes
+        timeout-minutes: 20
         if: always() && steps.pm.outputs.pkg == 'sim' && steps.instala.outcome == 'success'
         run: |
           if npm run | grep -qE '^  test'; then
@@ -159,6 +164,7 @@ jobs:
       # continua no resumo e no relatorio; quem barra e teste e segredo vazado.
       - name: build
         id: build
+        timeout-minutes: 20
         continue-on-error: true
         if: always() && inputs.run_build && steps.pm.outputs.pkg == 'sim' && steps.instala.outcome == 'success'
         run: |

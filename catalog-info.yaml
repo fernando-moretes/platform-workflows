@@ -1,0 +1,25 @@
+# Gerado por fernando-moretes/platform. Não edite aqui: mude no orquestrador e
+# rode `make rollout`. É o que o Backstage (backstage.home.lab) lê deste repo.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: platform-workflows
+  description: Workflows reutilizaveis das pipelines
+  annotations:
+    github.com/project-slug: fernando-moretes/platform-workflows
+    backstage.io/source-location: url:https://github.com/fernando-moretes/platform-workflows
+    sonarqube.org/project-key: platform-workflows
+  links:
+    - url: https://github.com/fernando-moretes/platform-workflows/actions
+      title: Actions
+      icon: github
+    - url: https://sonarqube.home.lab/dashboard?id=platform-workflows
+      title: SonarQube
+    - url: https://defectdojo.home.lab/product?name=platform-workflows
+      title: DefectDojo
+  tags: [other, ci-python.yml]
+spec:
+  type: other
+  lifecycle: production
+  owner: group:plataforma
+  system: homelab

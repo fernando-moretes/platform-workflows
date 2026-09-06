@@ -75,6 +75,7 @@ jobs:
         run: |
           # A CA do homelab ja esta na imagem do runner; o curl confia sozinho.
           MSG="**${{ github.repository }}** · ${VEREDITO:-?} · \`${GITHUB_REF_NAME}\` · [run ${{ github.run_number }}](${GITHUB_SERVER_URL}/${{ github.repository }}/actions/runs/${{ github.run_id }}) · por ${{ github.actor }}"
-          curl -s -o /dev/null -H 'Content-Type: application/json' \
+          # -f: sem ele um 302 do forward-auth ou um 4xx passa como sucesso.
+          curl -sf -o /dev/null -H 'Content-Type: application/json' \
             -d "$(python3 -c 'import json,sys; print(json.dumps({"text": sys.argv[1], "username": "esteira"}))' "$MSG")" \
-            "$WEBHOOK" || echo "::warning::não consegui avisar no Mattermost"
+            "$WEBHOOK" || echo "::warning::não consegui avisar no Mattermost (HTTP != 2xx)"

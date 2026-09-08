@@ -9,6 +9,8 @@ metadata:
     github.com/project-slug: fernando-moretes/platform-workflows
     backstage.io/source-location: url:https://github.com/fernando-moretes/platform-workflows
     sonarqube.org/project-key: platform-workflows
+    # TechDocs: mkdocs.yml + docs/ do proprio repositorio (rolados pelo platform)
+    backstage.io/techdocs-ref: dir:.
   links:
     - url: https://github.com/fernando-moretes/platform-workflows/actions
       title: Actions

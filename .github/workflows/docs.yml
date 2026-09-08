@@ -1,0 +1,80 @@
+# Documentacao: constroi o TechDocs (mkdocs) e valida o OpenAPI de cada repo.
+# Report-only por enquanto: os passos avisam (::warning) e o relatorio do run
+# mostra, mas nao reprovam — vira gate quando a maioria estiver revisada.
+name: docs
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: '["self-hosted","homelab"]'
+
+jobs:
+  docs:
+    name: documentação
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: inventário
+        id: inv
+        shell: bash
+        run: |
+          set -euo pipefail
+          tem_mkdocs=$([ -f mkdocs.yml ] && echo sim || echo nao)
+          tem_openapi=$(ls docs/openapi.json docs/openapi.yaml docs/openapi.yml openapi.json openapi.yaml 2>/dev/null | head -1 || true)
+          rascunhos=$(grep -lsr "^status: rascunho" docs/*.md 2>/dev/null | wc -l | tr -d ' ')
+          paginas=$(ls docs/*.md 2>/dev/null | wc -l | tr -d ' ')
+          echo "mkdocs=$tem_mkdocs" >> "$GITHUB_OUTPUT"
+          echo "openapi=$tem_openapi" >> "$GITHUB_OUTPUT"
+          echo "rascunhos=$rascunhos" >> "$GITHUB_OUTPUT"
+          echo "paginas=$paginas" >> "$GITHUB_OUTPUT"
+          echo "mkdocs=$tem_mkdocs openapi=${tem_openapi:-nenhum} paginas=$paginas rascunhos=$rascunhos"
+
+      - name: mkdocs build
+        if: steps.inv.outputs.mkdocs == 'sim'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv-docs && . .venv-docs/bin/activate
+          pip install -q mkdocs-techdocs-core 2>&1 | tail -1 || true
+          if ! mkdocs build --strict --site-dir .site-docs 2>&1 | tee mkdocs.log; then
+            echo "::warning title=mkdocs::mkdocs build --strict falhou — veja o log no passo"; exit 1
+          fi
+
+      - name: openapi válido
+        if: steps.inv.outputs.openapi != ''
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          . .venv-docs/bin/activate 2>/dev/null || { python3 -m venv .venv-docs && . .venv-docs/bin/activate; }
+          pip install -q openapi-spec-validator 2>&1 | tail -1 || true
+          if ! openapi-spec-validator "${{ steps.inv.outputs.openapi }}"; then
+            echo "::warning title=openapi::${{ steps.inv.outputs.openapi }} não é um OpenAPI válido"; exit 1
+          fi
+
+      - name: resumo
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Documentação"
+            echo "| mkdocs | OpenAPI | páginas | rascunhos |"
+            echo "|---|---|---|---|"
+            echo "| ${{ steps.inv.outputs.mkdocs }} | ${{ steps.inv.outputs.openapi || 'nenhum' }} | ${{ steps.inv.outputs.paginas }} | ${{ steps.inv.outputs.rascunhos }} |"
+            echo
+            echo "TechDocs e Swagger UI: https://backstage.home.lab/catalog/default/component/${{ github.event.repository.name }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p docs-resultado
+          printf '{"mkdocs":"%s","openapi":"%s","paginas":%s,"rascunhos":%s}\n' "${{ steps.inv.outputs.mkdocs }}" "${{ steps.inv.outputs.openapi }}" "${{ steps.inv.outputs.paginas || 0 }}" "${{ steps.inv.outputs.rascunhos || 0 }}" > docs-resultado/docs.json
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: docs-resultado
+          path: docs-resultado
+          if-no-files-found: ignore

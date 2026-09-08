@@ -44,7 +44,9 @@ SAIDA = os.environ.get("SAIDA_HTML", "relatorio.html")
 # Etapas que apontam mas nao reprovam. Precisam aparecer diferente de uma falha
 # de verdade, senao o relatorio ensina que vermelho nao significa nada.
 NAO_BLOQUEIAM = {"lint", "typecheck", "build", "ruff", "formatação", "formatacao",
-                 "links do README", "Terraform/OpenTofu formatado"}
+                 "links do README", "Terraform/OpenTofu formatado",
+                 # documentacao e report-only ate a maioria estar revisada
+                 "mkdocs build", "openapi válido", "openapi valido"}
 
 
 def api(caminho: str):

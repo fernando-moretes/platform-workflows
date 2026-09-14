@@ -25,8 +25,10 @@ jobs:
           set -euo pipefail
           tem_mkdocs=$([ -f mkdocs.yml ] && echo sim || echo nao)
           tem_openapi=$(ls docs/openapi.json docs/openapi.yaml docs/openapi.yml openapi.json openapi.yaml 2>/dev/null | head -1 || true)
-          rascunhos=$(grep -lsr "^status: rascunho" docs/*.md 2>/dev/null | wc -l | tr -d ' ')
-          paginas=$(ls docs/*.md 2>/dev/null | wc -l | tr -d ' ')
+          # `grep` sem resultado e `ls` sem docs/*.md devolvem status ≠ 0; com
+          # `pipefail` isso derrubava o job em todo repositório sem rascunhos.
+          rascunhos=$( (grep -lsr "^status: rascunho" docs/*.md 2>/dev/null || true) | wc -l | tr -d ' ')
+          paginas=$( (ls docs/*.md 2>/dev/null || true) | wc -l | tr -d ' ')
           echo "mkdocs=$tem_mkdocs" >> "$GITHUB_OUTPUT"
           echo "openapi=$tem_openapi" >> "$GITHUB_OUTPUT"
           echo "rascunhos=$rascunhos" >> "$GITHUB_OUTPUT"

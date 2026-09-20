@@ -10,6 +10,13 @@ on:
           self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
         type: string
         default: '["self-hosted","homelab"]'
+      testes:
+        description: >
+          "bloqueia" (padrao) reprova o CI se os testes falharem; "report-only"
+          so avisa; "pula" nem roda — e o caso dos espelhos de upstream, cuja
+          suite pertence ao projeto de origem.
+        type: string
+        default: "bloqueia"
       python_version:
         type: string
         default: "3.12"
@@ -69,7 +76,8 @@ jobs:
         run: uv run --no-project --with ruff ruff format --check . || echo "::warning::código fora do formato do ruff"
 
       - name: testes
-        if: always()
+        if: always() && inputs.testes != 'pula'
+        continue-on-error: ${{ inputs.testes == 'report-only' }}
         timeout-minutes: 20
         run: |
           if [[ -d tests ]] || compgen -G "test_*.py" > /dev/null || compgen -G "*_test.py" > /dev/null; then

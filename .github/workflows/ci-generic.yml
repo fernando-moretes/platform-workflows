@@ -14,6 +14,13 @@ on:
           self-hosted e gratuito e nao consome a cota de 2.000/mes do GitHub.
         type: string
         default: '["self-hosted","homelab"]'
+      testes:
+        description: >
+          "bloqueia" (padrao) reprova o CI se os testes falharem; "report-only"
+          so avisa; "pula" nem roda — e o caso dos espelhos de upstream, cuja
+          suite pertence ao projeto de origem.
+        type: string
+        default: "bloqueia"
 
 permissions:
   contents: read

@@ -19,6 +19,13 @@ on:
       draft:
         type: boolean
         default: false
+      ativo:
+        description: >
+          false desliga o release: e o caso dos espelhos de upstream, onde a
+          tag seria cortada em cima de codigo de terceiros e colidiria com as
+          tags do projeto de origem.
+        type: boolean
+        default: true
     outputs:
       version:
         description: A versão cortada, ou vazio se não havia o que lançar
@@ -29,6 +36,7 @@ permissions:
 
 jobs:
   release:
+    if: ${{ inputs.ativo }}
     runs-on: ${{ fromJSON(inputs.runner) }}
     outputs:
       version: ${{ steps.versao.outputs.version }}
@@ -46,7 +54,9 @@ jobs:
           # linha e, num repositorio com milhares de tags (litellm), o git tag
           # ainda esta escrevendo — leva SIGPIPE, e com `pipefail` o passo morre
           # com 141 sem nenhuma mensagem. O sed le tudo ate o fim.
-          ULTIMA=$(git tag --list "${PREFIX}*" --sort=-v:refname | sed -n '1p')
+          # So tag semver estrita (v1.2.3): pre-release do upstream como v2.0.0b2
+          # quebrava a aritmetica ("value too great for base").
+          ULTIMA=$(git tag --list "${PREFIX}*" --sort=-v:refname | grep -E "^${PREFIX}[0-9]+\.[0-9]+\.[0-9]+$" | sed -n '1p' || true)
 
           if [[ -z "$ULTIMA" ]]; then
             RANGE=""

@@ -110,6 +110,8 @@ jobs:
       - name: instala
         id: instala
         timeout-minutes: 20
+        # Espelho de upstream (testes: pula): install que não resolve não reprova.
+        continue-on-error: ${{ inputs.testes == 'pula' }}
         if: steps.pm.outputs.pkg == 'sim'
         run: |
           case "${{ steps.pm.outputs.pm }}" in

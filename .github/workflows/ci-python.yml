@@ -46,6 +46,10 @@ jobs:
 
       - name: instala dependências
         timeout-minutes: 20
+        # Espelho de upstream (testes: pula): dependência que não resolve fora do
+        # ambiente original (ex.: pwnagotchi, só no Raspberry) não pode reprovar —
+        # o piso continua sendo a sintaxe, que não depende da instalação.
+        continue-on-error: ${{ inputs.testes == 'pula' }}
         run: |
           # Instalar no interpretador do sistema esbarra no PEP 668 ("externally
           # managed environment") nos runners Debian/Ubuntu. Um venv proprio

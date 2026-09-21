@@ -42,6 +42,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner) }}
     outputs:
       vazou: ${{ steps.gitleaks.outcome == 'failure' }}
+      espelho: ${{ steps.historico.outputs.espelho }}
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 1 }
@@ -49,12 +50,14 @@ jobs:
       # (topico espelho-upstream) o historico e de terceiros e enorme: o checkout
       # do svc-litellm passou de 20 min e o job nunca chegava ao gitleaks.
       - name: histórico completo (fora de espelho)
+        id: historico
         env: { GH_TOKEN: "${{ github.token }}" }
         shell: bash
         run: |
           set -euo pipefail
           if gh api "repos/${{ github.repository }}/topics" --jq '.names[]' 2>/dev/null | grep -qx espelho-upstream; then
             echo "::notice::espelho de upstream — gitleaks só no estado atual, sem histórico"
+            echo "espelho=sim" >> "$GITHUB_OUTPUT"
           else
             git fetch --unshallow --quiet || git fetch --deepen=1000 --quiet || true
           fi
@@ -247,6 +250,14 @@ jobs:
           # decide: sem SARIF com achado, nao ha o que barrar.
           if [[ "${{ needs.segredos.outputs.vazou }}" != "true" ]]; then
             echo "sem segredo vazado; demais achados estão no relatório e no DefectDojo"
+            exit 0
+          fi
+          # Espelho de upstream: o repositorio inteiro entrou num unico commit de
+          # importacao, assinado pelo dono da conta — todo fixture e exemplo de doc
+          # do projeto alheio (TEST_KEY_PATTERNS.md do litellm…) viraria "segredo
+          # nosso". Nada ali e nosso para rotacionar: vai ao relatorio, nao barra.
+          if [[ "${{ needs.segredos.outputs.espelho }}" == "sim" ]]; then
+            echo "::warning::espelho de upstream — achados do gitleaks ficam no relatório e no DefectDojo, sem barrar"
             exit 0
           fi
           if [[ ! -s relatorios/gitleaks/results.sarif ]]; then

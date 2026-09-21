@@ -15,6 +15,7 @@ jobs:
     uses: fernando-moretes/platform-workflows/.github/workflows/ci-python.yml@main
     with:
       runner: '["ubuntu-latest"]'
+      testes: "bloqueia"
 
   seguranca:
     # O chamador precisa conceder o que o workflow chamado pede: um reusable
@@ -46,6 +47,7 @@ jobs:
     uses: fernando-moretes/platform-workflows/.github/workflows/release.yml@main
     with:
       runner: '["ubuntu-latest"]'
+      ativo: true
     permissions:
       contents: write
 

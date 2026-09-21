@@ -39,7 +39,7 @@ jobs:
       # a tag movel `v10`, so `v10.0.0` e `v10.0.1`. Com `@v10` o run morre em
       # "Set up job" (unable to resolve action), antes de rodar qualquer codigo
       # — foi o que derrubou todo repositorio Python da frota.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: ${{ inputs.python_version }}
           enable-cache: true

@@ -21,11 +21,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           filter: blob:none
+          # Padrões estreitos de propósito: com blob:none cada arquivo materializado
+          # é um fetch; "docs" inteiro no litellm (docs/my-website, milhares de
+          # arquivos) levou 30 min só no checkout. O TechDocs só precisa disto.
           sparse-checkout: |
-            docs
-            mkdocs.yml
-            openapi.json
-            openapi.yaml
+            /docs/*.md
+            /docs/c4/
+            /docs/openapi.*
+            /mkdocs.yml
+            /openapi.*
           sparse-checkout-cone-mode: false
 
       - name: inventário

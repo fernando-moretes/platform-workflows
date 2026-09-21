@@ -38,12 +38,26 @@ permissions:
 jobs:
   segredos:
     name: segredos vazados
+    timeout-minutes: 30
     runs-on: ${{ fromJSON(inputs.runner) }}
     outputs:
       vazou: ${{ steps.gitleaks.outcome == 'failure' }}
     steps:
       - uses: actions/checkout@v7
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 1 }
+      # Historico completo so em repositorio proprio. Num espelho de upstream
+      # (topico espelho-upstream) o historico e de terceiros e enorme: o checkout
+      # do svc-litellm passou de 20 min e o job nunca chegava ao gitleaks.
+      - name: histórico completo (fora de espelho)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/${{ github.repository }}/topics" --jq '.names[]' 2>/dev/null | grep -qx espelho-upstream; then
+            echo "::notice::espelho de upstream — gitleaks só no estado atual, sem histórico"
+          else
+            git fetch --unshallow --quiet || git fetch --deepen=1000 --quiet || true
+          fi
       # O binario, nao a acao: gitleaks-action@v2 exige licenca paga quando o
       # repositorio pertence a uma organizacao, e falhava com "missing gitleaks
       # license" — barrando todo merge por erro de licenca, nao por vazamento.
@@ -101,6 +115,7 @@ jobs:
 
   dependencias:
     name: dependências vulneráveis
+    timeout-minutes: 30
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
       - uses: actions/checkout@v7

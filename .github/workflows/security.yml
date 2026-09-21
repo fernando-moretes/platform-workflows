@@ -186,6 +186,9 @@ jobs:
             -Dsonar.projectKey=${{ inputs.product_name }}
             -Dsonar.projectName=${{ inputs.product_name }}
             -Dsonar.java.binaries=.
+            -Dsonar.scanner.socketTimeout=300
+            -Dsonar.scanner.responseTimeout=300
+            -Dsonar.ws.timeout=300
 
   consolida:
     name: envia ao DefectDojo

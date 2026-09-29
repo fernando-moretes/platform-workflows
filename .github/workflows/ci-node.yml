@@ -103,8 +103,11 @@ jobs:
           node-version: ${{ inputs.node_version }}
           # Espelho (testes: pula): sem cache — o upload do node_modules de um
           # monorepo de terceiros pelo uplink do homelab travou o post-step por 1 h.
-          cache: ${{ inputs.testes != 'pula' && steps.pm.outputs.lock == 'sim' && steps.pm.outputs.pm || '' }}
-          cache-dependency-path: ${{ inputs.testes != 'pula' && steps.pm.outputs.lock == 'sim' && format('{0}/*lock*', inputs.working_directory) || '' }}
+          # Runner proprio (self-hosted) tambem sem cache do GitHub: o npm/pnpm ja
+          # guarda o cache no disco do runner, e salvar no GitHub compactava tudo
+          # no HD do gandalf e subia pelo upload da Claro (29/09).
+          cache: ${{ !contains(inputs.runner, 'self-hosted') && inputs.testes != 'pula' && steps.pm.outputs.lock == 'sim' && steps.pm.outputs.pm || '' }}
+          cache-dependency-path: ${{ !contains(inputs.runner, 'self-hosted') && inputs.testes != 'pula' && steps.pm.outputs.lock == 'sim' && format('{0}/*lock*', inputs.working_directory) || '' }}
 
       # Teto nas etapas longas. Um `yarn install` do tool-web-check ficou 55 min
       # pendurado e segurou um dos dois runners ate ser cancelado a mao; com o

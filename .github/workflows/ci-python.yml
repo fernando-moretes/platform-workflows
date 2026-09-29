@@ -42,7 +42,12 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: ${{ inputs.python_version }}
-          enable-cache: true
+          # Cache do GitHub so em runner hospedado. No self-hosted o uv ja guarda
+          # o cache no disco do runner (podado pelo timer limpa-runner-cache), e
+          # salvar no GitHub compactava GBs (torch…) no HD do gandalf e subia
+          # tudo pelo upload da Claro: em 29/09 dois jobs assim deixaram o disco
+          # 70 % do tempo em espera e travaram o SQLite do Grafana.
+          enable-cache: ${{ !contains(inputs.runner, 'self-hosted') }}
 
       - name: instala dependências
         timeout-minutes: 20

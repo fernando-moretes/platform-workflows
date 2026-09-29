@@ -39,13 +39,17 @@ jobs:
       # a tag movel `v10`, so `v10.0.0` e `v10.0.1`. Com `@v10` o run morre em
       # "Set up job" (unable to resolve action), antes de rodar qualquer codigo
       # — foi o que derrubou todo repositorio Python da frota.
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: ${{ inputs.python_version }}
           enable-cache: true
 
       - name: instala dependências
         timeout-minutes: 20
+        # Espelho de upstream (testes: pula): dependência que não resolve fora do
+        # ambiente original (ex.: pwnagotchi, só no Raspberry) não pode reprovar —
+        # o piso continua sendo a sintaxe, que não depende da instalação.
+        continue-on-error: ${{ inputs.testes == 'pula' }}
         run: |
           # Instalar no interpretador do sistema esbarra no PEP 668 ("externally
           # managed environment") nos runners Debian/Ubuntu. Um venv proprio
